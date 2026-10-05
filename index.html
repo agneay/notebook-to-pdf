@@ -170,7 +170,8 @@ body{margin:0}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
 window.MathJax = { tex:{inlineMath:[['$','$'],['\\(','\\)']],displayMath:[['$$','$$'],['\\[','\\]']],processEscapes:true},
   svg:{fontCache:'local'}, startup:{typeset:false} };
@@ -331,34 +332,95 @@ document.addEventListener('drop', e=>{ const f=e.dataTransfer?.files?.[0]; if(f)
 let tt; $('titleIn').addEventListener('input', ()=>{ clearTimeout(tt); tt=setTimeout(render, 250); });
 
 
+
+// Render the paper one block (cell) at a time. Drawing the whole notebook onto a single
+// canvas breaks past the browser's canvas size limit and produces blank pages.
+const MAX_CANVAS_SIDE = 12000, MAX_CANVAS_AREA = 16e6;
+const nextFrame = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
+
+// Look upward from row `y` for a blank (white) row so slices don't cut through text.
+function findCut(canvas, y, minY){
+  const ctx = canvas.getContext('2d', {willReadFrequently:true});
+  const top = Math.max(minY, Math.floor(y - (y - minY) * 0.25));
+  if(y - top < 2) return y;
+  const data = ctx.getImageData(0, top, canvas.width, y - top).data, w = canvas.width;
+  for(let row = y - top - 1; row >= 0; row--){
+    let blank = true;
+    for(let x = 0; x < w; x += 2){ const i = (row * w + x) * 4; if(data[i] < 245 || data[i+1] < 245 || data[i+2] < 245){ blank = false; break; } }
+    if(blank) return top + row + 1;
+  }
+  return y;
+}
+
+async function buildPdf(o){
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({unit:'mm', format:o.paper, orientation:'portrait', compress:true});
+  const W = pdf.internal.pageSize.getWidth(), H = pdf.internal.pageSize.getHeight();
+  const M = {t:14, r:14, b:16, l:14}, cw = W - M.l - M.r, bottom = H - M.b;
+  const pxW = paper.clientWidth, mmPerPx = cw / pxW;
+  const blocks = [...paper.children].filter(el => el.offsetHeight > 0);
+  let y = M.t, used = false;
+  const newPage = () => { pdf.addPage(); y = M.t; used = false; };
+  const place = (cv, hmm) => { pdf.addImage(cv.toDataURL('image/jpeg', 0.92), 'JPEG', M.l, y, cw, hmm, undefined, 'FAST'); y += hmm; used = true; };
+
+  for(let i = 0; i < blocks.length; i++){
+    const el = blocks[i];
+    status(`Rendering cell ${i + 1} of ${blocks.length}…`);
+    await nextFrame();
+    const hpx = el.offsetHeight, wpx = el.offsetWidth;
+    const scale = Math.max(0.6, Math.min(2, MAX_CANVAS_SIDE / hpx, Math.sqrt(MAX_CANVAS_AREA / (wpx * hpx))));
+    const canvas = await html2canvas(el, {scale, backgroundColor:'#ffffff', useCORS:true, logging:false});
+    const gap = parseFloat(getComputedStyle(el).marginBottom || 0) * mmPerPx;
+    const imgW = wpx * mmPerPx, pxPerMm = canvas.width / imgW;
+    const fullH = canvas.height / pxPerMm;
+
+    if(fullH <= bottom - y){ place(canvas, fullH); }
+    else if(fullH <= bottom - M.t){ if(used) newPage(); place(canvas, fullH); }
+    else {
+      // taller than a page: slice it, preferring blank rows as cut points
+      let off = 0;
+      while(off < canvas.height){
+        let avail = bottom - y;
+        if(avail < 25 && used){ newPage(); avail = bottom - y; }
+        let cut = Math.min(canvas.height, off + Math.floor(avail * pxPerMm));
+        if(cut < canvas.height) cut = findCut(canvas, cut, off + 1);
+        const slice = document.createElement('canvas');
+        slice.width = canvas.width; slice.height = cut - off;
+        const sctx = slice.getContext('2d'); sctx.fillStyle = '#fff'; sctx.fillRect(0, 0, slice.width, slice.height);
+        sctx.drawImage(canvas, 0, off, canvas.width, cut - off, 0, 0, canvas.width, cut - off);
+        place(slice, slice.height / pxPerMm);
+        off = cut;
+        if(off < canvas.height) newPage();
+      }
+    }
+    y += gap;
+    canvas.width = canvas.height = 0; // free memory
+  }
+  const n = pdf.internal.getNumberOfPages();
+  if(o.nums){
+    for(let p = 1; p <= n; p++){ pdf.setPage(p); pdf.setFontSize(9); pdf.setTextColor(120); pdf.text(`${p} / ${n}`, W / 2, H - 7, {align:'center'}); }
+  }
+  return { blob: pdf.output('blob'), pages: n };
+}
+
 $('goBtn').addEventListener('click', async ()=>{
   const btn = $('goBtn'), o = opts();
-  if(typeof html2pdf === 'undefined'){ status('The PDF engine did not load. Reload the page and try again.', 'err'); return; }
+  if(typeof html2canvas === 'undefined' || !window.jspdf){ status('The PDF engine did not load. Reload the page and try again.', 'err'); return; }
   btn.disabled = true; status('Building PDF…');
   const name = (o.title || fileName.replace(/\.ipynb$/i,'') || 'notebook').replace(/[\\/:*?"<>|]+/g,'_') + '.pdf';
   paper.classList.add('exporting');
   try{
-    const blob = await html2pdf().set({
-      margin:[14,14,16,14],
-      image:{type:'jpeg', quality:0.95},
-      html2canvas:{scale:2, useCORS:true, backgroundColor:'#ffffff', windowWidth: paper.offsetWidth + 40},
-      jsPDF:{unit:'mm', format:o.paper, orientation:'portrait'},
-      pagebreak:{mode:['css','legacy'], avoid:['.out-img','.gut','tr','.doc-head','mjx-container']}
-    }).from(paper).toPdf().get('pdf').then(pdf=>{
-      if(!o.nums) return;
-      const n = pdf.internal.getNumberOfPages(), w = pdf.internal.pageSize.getWidth(), h = pdf.internal.pageSize.getHeight();
-      for(let i=1;i<=n;i++){ pdf.setPage(i); pdf.setFontSize(9); pdf.setTextColor(120); pdf.text(`${i} / ${n}`, w/2, h-7, {align:'center'}); }
-    }).outputPdf('blob');
+    const { blob, pages } = await buildPdf(o);
     paper.classList.remove('exporting');
     const url = URL.createObjectURL(blob);
     const a = Object.assign(document.createElement('a'), {href:url, download:name});
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(()=>URL.revokeObjectURL(url), 10000);
-    status(`Saved ${name} (${(blob.size/1024/1024).toFixed(1)} MB).`, 'ok');
+    status(`Saved ${name} (${pages} pages, ${(blob.size/1024/1024).toFixed(1)} MB).`, 'ok');
   }catch(e){
     paper.classList.remove('exporting');
     status('Could not build the PDF: ' + (e?.message || 'unknown error'), 'err');
-  }finally{ btn.disabled = false; }
+  }finally{ btn.disabled = false; paper.classList.remove('exporting'); }
 });
 
 function boot(){ setMeta(); render(); }
