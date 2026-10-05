@@ -7,7 +7,7 @@
 <meta name="color-scheme" content="light dark">
 <title>Notebook to PDF</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;600&display=swap">
 <style>
 /* Layout: a control rail beside a live "printed page" preview; the paper keeps its own light palette because that is what the PDF will look like. */
 :root{
@@ -68,54 +68,100 @@ button.go:disabled{opacity:.55;cursor:progress}
 .stage{min-width:0;overflow-x:auto;padding-bottom:8px}
 .stage-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;gap:10px;flex-wrap:wrap}
 
-/* ---------- paper ---------- */
-#paper{background:var(--p-bg);color:var(--p-fg);width:794px;margin:0 auto;padding:56px 60px;box-shadow:0 1px 2px rgba(0,0,0,.12),0 8px 28px rgba(20,30,60,.12);border-radius:2px;font:15px/1.6 var(--serif)}
+#paper.preview{box-shadow:0 1px 2px rgba(0,0,0,.12),0 8px 28px rgba(20,30,60,.12);border-radius:2px;margin:0 auto}
+#paper.exporting{box-shadow:none;padding:0!important;border-radius:0}
+.empty{padding:40px;text-align:center;color:#6b7280;font-family:var(--display)}
+select{width:100%;font:inherit;font-size:.9rem;padding:7px 10px;border-radius:7px;border:1px solid var(--line);background:var(--bg);color:var(--fg);cursor:pointer}
+select:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.seg.three{grid-template-columns:1fr 1fr 1fr}
+.field{display:flex;flex-direction:column;gap:6px}
+.actions{display:grid;grid-template-columns:1fr;gap:8px}
+button.alt{font:inherit;font-weight:600;font-size:.95rem;padding:10px;border-radius:9px;border:1.5px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer}
+button.alt:hover{background:var(--accent-soft)}
+button.alt:focus-visible{outline:3px solid var(--accent-soft);outline-offset:2px}
+button.alt:disabled{opacity:.55;cursor:progress}
+</style>
+<style id="paperCss">
+/* Everything the rendered notebook needs; copied verbatim into exported HTML. */
+#paper{
+  --p-bg:#ffffff; --p-fg:#1d1f24; --p-muted:#6b7280; --p-line:#e4e6ea; --p-in:#2f5bd3; --p-out:#c2410c; --p-err:#fdecea; --p-link:#2f5bd3; --p-stripe:#f8f9fb;
+  --f-body:"Source Serif 4", Georgia, "Times New Roman", serif;
+  --f-head:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-mono:"JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  --fs:15px; --code-fs:12.5px; --pad-x:60px; --pad-y:56px; --radius:4px; --head-weight:700;
+  --c-bg:#f6f7f9; --c-fg:#1d1f24; --c-border:#e4e6ea;
+  --k-kw:#7c3aed; --k-str:#15803d; --k-num:#b45309; --k-com:#8a8f98; --k-fn:#1d4ed8; --k-meta:#0f766e; --k-type:#be185d;
+  background:var(--p-bg);color:var(--p-fg);width:794px;max-width:none;padding:var(--pad-y) var(--pad-x);
+  font-family:var(--f-body);font-size:var(--fs);line-height:1.6;box-sizing:border-box;
+}
+#paper *{box-sizing:border-box}
 #paper.letter{width:816px}
-#paper.exporting{box-shadow:none;padding:0;border-radius:0}
-.doc-head{border-bottom:1px solid var(--p-line);padding-bottom:12px;margin-bottom:22px}
-.doc-head h2{font:700 1.5rem/1.25 var(--display);margin:0 0 4px}
-.doc-head div{font:12px var(--mono);color:var(--p-muted)}
-.cell{display:grid;grid-template-columns:62px minmax(0,1fr);column-gap:10px;margin:0 0 14px}
-.cell.nogutter{grid-template-columns:minmax(0,1fr)}
-.cell.nogutter .gut{display:none}
-.gut{font:11px/1.9 var(--mono);text-align:right;padding-top:9px;white-space:nowrap}
-.gut.in{color:var(--p-in)} .gut.out{color:var(--p-out)}
-.row{display:contents}
-.code{background:var(--p-code);border:1px solid var(--p-line);border-radius:4px;padding:9px 12px;font:12.5px/1.55 var(--mono);white-space:pre-wrap;word-break:break-word;margin:0 0 6px}
-.out{font:12.5px/1.5 var(--mono);white-space:pre-wrap;word-break:break-word;padding:6px 2px;margin:0 0 6px}
-.out.stderr{background:#fff4e5}
-.out.error{background:var(--p-err);padding:8px 10px;border-radius:4px}
-.out-img{max-width:100%;display:block;margin:4px 0 8px}
-.out-html{overflow-x:auto;font:13px/1.45 var(--display);margin:0 0 6px}
-.out-html table{border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}
-.out-html th,.out-html td{border-bottom:1px solid var(--p-line);padding:4px 10px;text-align:right}
-.out-html thead th{border-bottom:1.5px solid var(--p-fg)}
-.out-html tbody tr:nth-child(odd){background:#f8f9fb}
-.md{min-width:0}
-.md h1,.md h2,.md h3,.md h4{font-family:var(--display);line-height:1.25;margin:1.1em 0 .4em;text-wrap:balance}
-.md h1{font-size:1.65rem}.md h2{font-size:1.3rem}.md h3{font-size:1.1rem}
-.md > :first-child{margin-top:0}
-.md p,.md ul,.md ol{margin:.5em 0}
-.md code{font:.85em var(--mono);background:var(--p-code);padding:1px 4px;border-radius:3px}
-.md pre{background:var(--p-code);border:1px solid var(--p-line);border-radius:4px;padding:9px 12px;white-space:pre-wrap;font:12.5px/1.55 var(--mono)}
-.md pre code{background:none;padding:0}
-.md blockquote{margin:.6em 0;padding-left:12px;border-left:3px solid var(--p-line);color:var(--p-muted)}
-.md table{border-collapse:collapse;margin:.6em 0;font-size:.9em}
-.md th,.md td{border:1px solid var(--p-line);padding:4px 8px}
-.md img{max-width:100%}
-.md a{color:var(--p-in)}
-.md hr{border:0;border-top:1px solid var(--p-line)}
-mjx-container{color:var(--p-fg)}
-mjx-container[display="true"]{overflow-x:auto;overflow-y:hidden}
-/* highlight.js tokens (paper is always light) */
-.hljs-keyword,.hljs-built_in,.hljs-selector-tag{color:#7c3aed}
-.hljs-string,.hljs-regexp{color:#15803d}
-.hljs-number,.hljs-literal{color:#b45309}
-.hljs-comment{color:#8a8f98;font-style:italic}
-.hljs-title,.hljs-title.function_{color:#1d4ed8}
-.hljs-meta,.hljs-attr,.hljs-params{color:#0f766e}
-.hljs-type,.hljs-class{color:#be185d}
-.empty{padding:40px;text-align:center;color:var(--p-muted);font-family:var(--display)}
+/* document styles */
+#paper.st-academic{--f-head:"Source Serif 4", Georgia, serif; --head-weight:600; --p-in:#555b66; --p-out:#555b66; --p-link:#1f3f8f; --radius:0px}
+#paper.st-academic .md p{text-align:justify;hyphens:auto}
+#paper.st-academic .doc-head{text-align:center;border-bottom:0}
+#paper.st-academic .code{border-width:0 0 0 2px}
+#paper.st-jupyter{--f-body:-apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; --f-head:var(--f-body); --p-in:#303f9f; --p-out:#d84315; --radius:2px; --c-border:#cfcfcf}
+#paper.st-minimal{--f-body:"IBM Plex Sans", "Helvetica Neue", Arial, sans-serif; --f-head:var(--f-body); --head-weight:600; --radius:0px; --p-stripe:transparent}
+#paper.st-minimal .code{border-width:0 0 0 3px;padding-left:14px}
+#paper.st-minimal .doc-head{border-bottom-width:2px;border-color:var(--p-fg)}
+/* code themes */
+#paper.ct-github{--c-bg:#f6f8fa;--c-fg:#24292f;--c-border:#d0d7de;--k-kw:#cf222e;--k-str:#0a3069;--k-num:#0550ae;--k-com:#6e7781;--k-fn:#8250df;--k-meta:#0550ae;--k-type:#953800}
+#paper.ct-monokai{--c-bg:#272822;--c-fg:#f8f8f2;--c-border:#272822;--k-kw:#f92672;--k-str:#e6db74;--k-num:#ae81ff;--k-com:#8f8a75;--k-fn:#a6e22e;--k-meta:#66d9ef;--k-type:#66d9ef}
+#paper.ct-solarized{--c-bg:#fdf6e3;--c-fg:#586e75;--c-border:#eee8d5;--k-kw:#859900;--k-str:#2aa198;--k-num:#d33682;--k-com:#93a1a1;--k-fn:#268bd2;--k-meta:#cb4b16;--k-type:#b58900}
+#paper.ct-mono{--c-bg:#ffffff;--c-fg:#1d1f24;--c-border:#d9dce1;--k-kw:#1d1f24;--k-str:#1d1f24;--k-num:#1d1f24;--k-com:#7a7f88;--k-fn:#1d1f24;--k-meta:#1d1f24;--k-type:#1d1f24}
+#paper.ct-mono .hljs-keyword{font-weight:600}
+/* text size and margins */
+#paper.fs-s{--fs:13.5px;--code-fs:11.5px}
+#paper.fs-l{--fs:17px;--code-fs:14px}
+#paper.mg-narrow{--pad-x:34px;--pad-y:34px}
+#paper.mg-wide{--pad-x:88px;--pad-y:76px}
+
+#paper .doc-head{border-bottom:1px solid var(--p-line);padding-bottom:12px;margin-bottom:22px}
+#paper .doc-head h2{font-family:var(--f-head);font-weight:700;font-size:1.6em;line-height:1.25;margin:0 0 4px}
+#paper .doc-head div{font:12px var(--f-mono);color:var(--p-muted)}
+#paper .cell{display:grid;grid-template-columns:62px minmax(0,1fr);column-gap:10px;margin:0 0 14px}
+#paper .cell.nogutter{grid-template-columns:minmax(0,1fr)}
+#paper .cell.nogutter .gut{display:none}
+#paper .gut{font:11px/1.9 var(--f-mono);text-align:right;padding-top:9px;white-space:nowrap}
+#paper .gut.in{color:var(--p-in)} #paper .gut.out{color:var(--p-out)}
+#paper .code{background:var(--c-bg);color:var(--c-fg);border:1px solid var(--c-border);border-radius:var(--radius);padding:9px 12px;font-family:var(--f-mono);font-size:var(--code-fs);line-height:1.55;white-space:pre-wrap;word-break:break-word;margin:0 0 6px}
+#paper .out{font-family:var(--f-mono);font-size:var(--code-fs);line-height:1.5;white-space:pre-wrap;word-break:break-word;padding:6px 2px;margin:0 0 6px}
+#paper .out.stderr{background:#fff4e5}
+#paper .out.error{background:var(--p-err);padding:8px 10px;border-radius:var(--radius)}
+#paper .out-img{max-width:100%;height:auto;display:block;margin:4px 0 8px}
+#paper .out-html{overflow-x:auto;font:13px/1.45 var(--f-head);margin:0 0 6px}
+#paper .out-html table{border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}
+#paper .out-html th,#paper .out-html td{border:0;border-bottom:1px solid var(--p-line);padding:4px 10px;text-align:right}
+#paper .out-html thead th{border-bottom:1.5px solid var(--p-fg)}
+#paper .out-html tbody tr:nth-child(odd){background:var(--p-stripe)}
+#paper .md{min-width:0}
+#paper .md h1,#paper .md h2,#paper .md h3,#paper .md h4{font-family:var(--f-head);font-weight:var(--head-weight);line-height:1.25;margin:1.1em 0 .4em;text-wrap:balance}
+#paper .md h1{font-size:1.65em}#paper .md h2{font-size:1.3em}#paper .md h3{font-size:1.1em}
+#paper .md > :first-child{margin-top:0}
+#paper .md p,#paper .md ul,#paper .md ol{margin:.5em 0}
+#paper .md code{font-family:var(--f-mono);font-size:.85em;background:var(--c-bg);color:var(--c-fg);padding:1px 4px;border-radius:3px}
+#paper .md pre{background:var(--c-bg);color:var(--c-fg);border:1px solid var(--c-border);border-radius:var(--radius);padding:9px 12px;white-space:pre-wrap;font-family:var(--f-mono);font-size:var(--code-fs);line-height:1.55}
+#paper .md pre code{background:none;padding:0}
+#paper .md blockquote{margin:.6em 0;padding-left:12px;border-left:3px solid var(--p-line);color:var(--p-muted)}
+#paper .md table{border-collapse:collapse;margin:.6em 0;font-size:.9em}
+#paper .md th,#paper .md td{border:1px solid var(--p-line);padding:4px 8px}
+#paper .md img{max-width:100%}
+#paper .md a{color:var(--p-link)}
+#paper .md hr{border:0;border-top:1px solid var(--p-line)}
+#paper mjx-container{color:var(--p-fg)}
+#paper mjx-container[jax="SVG"]{direction:ltr}
+#paper mjx-container[jax="SVG"] > svg{overflow:visible;min-height:1px;min-width:1px}
+#paper mjx-container[display="true"]{display:block;text-align:center;margin:1em 0;overflow-x:auto;overflow-y:hidden}
+#paper .hljs-keyword,#paper .hljs-built_in,#paper .hljs-selector-tag{color:var(--k-kw)}
+#paper .hljs-string,#paper .hljs-regexp{color:var(--k-str)}
+#paper .hljs-number,#paper .hljs-literal{color:var(--k-num)}
+#paper .hljs-comment{color:var(--k-com);font-style:italic}
+#paper .hljs-title,#paper .hljs-title.function_{color:var(--k-fn)}
+#paper .hljs-meta,#paper .hljs-attr,#paper .hljs-params{color:var(--k-meta)}
+#paper .hljs-type,#paper .hljs-class{color:var(--k-type)}
+</style>
+<style>
 *{box-sizing:border-box}
 body{margin:0}
 .foot{max-width:1240px;margin:32px auto 0;color:var(--muted);font-size:.85rem}
@@ -126,7 +172,7 @@ body{margin:0}
 <body>
 <header class="top">
   <h1>Notebook to PDF</h1>
-  <p>Drop in a Jupyter <code>.ipynb</code>, check the preview, download a PDF. Everything runs in your browser.</p>
+  <p>Drop in a Jupyter <code>.ipynb</code>, pick a style, then download it as PDF or HTML. Everything runs in your browser.</p>
 </header>
 
 <div class="wrap">
@@ -158,13 +204,47 @@ body{margin:0}
       </div>
     </div>
 
-    <button class="go" id="goBtn">Download PDF</button>
+    <div class="box">
+      <div class="label">Style</div>
+      <div class="field"><label class="label" for="selStyle" style="text-transform:none;letter-spacing:0;font-size:.85rem">Document</label>
+        <select id="selStyle">
+          <option value="modern">Modern</option>
+          <option value="academic">Academic</option>
+          <option value="jupyter">Jupyter classic</option>
+          <option value="minimal">Minimal</option>
+        </select></div>
+      <div class="field"><label class="label" for="selCode" style="text-transform:none;letter-spacing:0;font-size:.85rem">Code theme</label>
+        <select id="selCode">
+          <option value="light">Soft light</option>
+          <option value="github">GitHub</option>
+          <option value="solarized">Solarized light</option>
+          <option value="monokai">Monokai (dark)</option>
+          <option value="mono">Black and white</option>
+        </select></div>
+      <div class="field"><span class="label" style="text-transform:none;letter-spacing:0;font-size:.85rem">Text size</span>
+        <div class="seg three">
+          <input type="radio" name="fsize" id="fsS" value="s"><label for="fsS">Small</label>
+          <input type="radio" name="fsize" id="fsM" value="m" checked><label for="fsM">Medium</label>
+          <input type="radio" name="fsize" id="fsL" value="l"><label for="fsL">Large</label>
+        </div></div>
+      <div class="field"><span class="label" style="text-transform:none;letter-spacing:0;font-size:.85rem">Margins</span>
+        <div class="seg three">
+          <input type="radio" name="margin" id="mgN" value="narrow"><label for="mgN">Narrow</label>
+          <input type="radio" name="margin" id="mgM" value="normal" checked><label for="mgM">Normal</label>
+          <input type="radio" name="margin" id="mgW" value="wide"><label for="mgW">Wide</label>
+        </div></div>
+    </div>
+
+    <div class="actions">
+      <button class="go" id="goBtn">Download PDF</button>
+      <button class="alt" id="htmlBtn">Download HTML</button>
+    </div>
     <div class="status" id="status" role="status"></div>
   </aside>
 
   <main class="stage">
     <div class="stage-head"><span class="label">Preview</span><span class="meta" id="pmeta"></span></div>
-    <div id="paper"><div class="empty">Loading renderer…</div></div>
+    <div id="paper" class="preview"><div class="empty">Loading renderer…</div></div>
   </main>
 </div>
 
@@ -174,7 +254,7 @@ body{margin:0}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
 window.MathJax = { tex:{inlineMath:[['$','$'],['\\(','\\)']],displayMath:[['$$','$$'],['\\[','\\]']],processEscapes:true},
-  svg:{fontCache:'local'}, startup:{typeset:false} };
+  svg:{fontCache:'none'}, startup:{typeset:false} };
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js"></script>
 <script>
@@ -249,8 +329,16 @@ function opts(){
   return { code:$('optCode').checked, out:$('optOut').checked, count:$('optCount').checked,
            head:$('optHead').checked, nums:$('optNums').checked,
            paper:document.querySelector('input[name=paper]:checked').value,
-           title:$('titleIn').value.trim() };
+           title:$('titleIn').value.trim(),
+           style:$('selStyle').value, codeTheme:$('selCode').value,
+           size:document.querySelector('input[name=fsize]:checked').value,
+           margin:document.querySelector('input[name=margin]:checked').value };
 }
+
+function paperClasses(o){
+  return [o.paper==='letter'?'letter':'a4', 'st-'+o.style, 'ct-'+o.codeTheme, 'fs-'+o.size, 'mg-'+o.margin].join(' ');
+}
+const MARGIN_MM = {narrow:8, normal:14, wide:22};
 
 function defaultTitle(){
   const md = (nb.cells||[]).find(c=>c.cell_type==='markdown');
@@ -262,7 +350,7 @@ async function render(){
   const o = opts();
   const lang = (nb.metadata?.language_info?.name || nb.metadata?.kernelspec?.language || 'python').toLowerCase();
   const cells = nb.cells || (nb.worksheets?.[0]?.cells) || [];
-  paper.className = o.paper==='letter' ? 'letter' : '';
+  paper.className = paperClasses(o) + ' preview';
   let html = '';
   if(o.head){
     const kernel = nb.metadata?.kernelspec?.display_name || lang;
@@ -328,10 +416,19 @@ fileIn.addEventListener('change', ()=>{ loadFile(fileIn.files[0]); fileIn.value=
 ['dragleave','drop'].forEach(ev=>document.addEventListener(ev, e=>{ e.preventDefault(); if(ev==='drop'||e.target===document.documentElement) drop.classList.remove('over'); }));
 document.addEventListener('drop', e=>{ const f=e.dataTransfer?.files?.[0]; if(f) loadFile(f); });
 
-['optCode','optOut','optCount','optHead','pA4','pLetter'].forEach(id=>$(id).addEventListener('change', render));
+['optCode','optOut','optCount','optHead','pA4','pLetter','selStyle','selCode','fsS','fsM','fsL','mgN','mgM','mgW'].forEach(id=>$(id).addEventListener('change', render));
 let tt; $('titleIn').addEventListener('input', ()=>{ clearTimeout(tt); tt=setTimeout(render, 250); });
 
 
+
+// Saving files (the claude.ai build swaps this for its downloads capability)
+async function saveFile(name, blob){
+  const url = URL.createObjectURL(blob);
+  const a = Object.assign(document.createElement('a'), {href:url, download:name});
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 10000);
+}
+function reportError(e){ status('Could not create the file: ' + (e?.message || 'unknown error'), 'err'); }
 
 // Render the paper one block (cell) at a time. Drawing the whole notebook onto a single
 // canvas breaks past the browser's canvas size limit and produces blank pages.
@@ -356,7 +453,9 @@ async function buildPdf(o){
   const { jsPDF } = window.jspdf;
   const pdf = new jsPDF({unit:'mm', format:o.paper, orientation:'portrait', compress:true});
   const W = pdf.internal.pageSize.getWidth(), H = pdf.internal.pageSize.getHeight();
-  const M = {t:14, r:14, b:16, l:14}, cw = W - M.l - M.r, bottom = H - M.b;
+  const mg = MARGIN_MM[o.margin] || 14;
+  const M = {t:mg, r:mg, b:mg + 2, l:mg}, cw = W - M.l - M.r, bottom = H - M.b;
+  paper.style.width = Math.round(cw * 96 / 25.4) + 'px';  // lay out at true print size
   const pxW = paper.clientWidth, mmPerPx = cw / pxW;
   const blocks = [...paper.children].filter(el => el.offsetHeight > 0);
   let y = M.t, used = false;
@@ -369,7 +468,8 @@ async function buildPdf(o){
     await nextFrame();
     const hpx = el.offsetHeight, wpx = el.offsetWidth;
     const scale = Math.max(0.6, Math.min(2, MAX_CANVAS_SIDE / hpx, Math.sqrt(MAX_CANVAS_AREA / (wpx * hpx))));
-    const canvas = await html2canvas(el, {scale, backgroundColor:'#ffffff', useCORS:true, logging:false});
+    const canvas = await html2canvas(el, {scale, backgroundColor:'#ffffff', useCORS:true, logging:false,
+      ignoreElements: n => n.tagName === 'MJX-ASSISTIVE-MML'});
     const gap = parseFloat(getComputedStyle(el).marginBottom || 0) * mmPerPx;
     const imgW = wpx * mmPerPx, pxPerMm = canvas.width / imgW;
     const fullH = canvas.height / pxPerMm;
@@ -412,15 +512,62 @@ $('goBtn').addEventListener('click', async ()=>{
   try{
     const { blob, pages } = await buildPdf(o);
     paper.classList.remove('exporting');
-    const url = URL.createObjectURL(blob);
-    const a = Object.assign(document.createElement('a'), {href:url, download:name});
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(()=>URL.revokeObjectURL(url), 10000);
+    await saveFile(name, blob);
     status(`Saved ${name} (${pages} pages, ${(blob.size/1024/1024).toFixed(1)} MB).`, 'ok');
   }catch(e){
     paper.classList.remove('exporting');
-    status('Could not build the PDF: ' + (e?.message || 'unknown error'), 'err');
-  }finally{ btn.disabled = false; paper.classList.remove('exporting'); }
+    reportError(e);
+  }finally{ btn.disabled = false; paper.classList.remove('exporting'); paper.style.width = ''; }
+});
+
+
+const FONTS_URL = "https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;600&display=swap";
+function buildHtml(o){
+  const clone = paper.cloneNode(true);
+  clone.className = paperClasses(o);
+  clone.removeAttribute('style');
+  clone.querySelectorAll('mjx-assistive-mml').forEach(n => n.remove());
+  const css = $('paperCss').textContent;
+  const mg = MARGIN_MM[o.margin] || 14;
+  const title = o.title || defaultTitle();
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="generator" content="Notebook to PDF">
+<title>${esc(title)}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="${FONTS_URL}">
+<style>
+body{margin:0;background:#eceef1;padding:32px 12px}
+#paper{margin:0 auto;box-shadow:0 1px 2px rgba(0,0,0,.12),0 8px 28px rgba(20,30,60,.12)}
+@media (max-width:860px){body{padding:0}#paper{width:auto!important;--pad-x:18px;--pad-y:24px;box-shadow:none}}
+@page{size:${o.paper==='letter'?'letter':'A4'};margin:${mg}mm}
+@media print{body{background:#fff;padding:0}#paper{width:auto!important;padding:0!important;box-shadow:none}
+  #paper .cell{break-inside:avoid-page}#paper .out-img{break-inside:avoid}}
+</style>
+<style>
+${css.trim()}
+</style>
+</head>
+<body>
+${clone.outerHTML}
+</body>
+</html>
+`;
+}
+
+$('htmlBtn').addEventListener('click', async ()=>{
+  const btn = $('htmlBtn'), o = opts();
+  btn.disabled = true;
+  const name = (o.title || fileName.replace(/\.ipynb$/i,'') || 'notebook').replace(/[\\/:*?"<>|]+/g,'_') + '.html';
+  try{
+    const html = buildHtml(o);
+    await saveFile(name, new Blob([html], {type:'text/html'}));
+    status(`Saved ${name} (${(html.length/1024).toFixed(0)} KB). Open it in a browser and print it for a PDF with selectable text.`, 'ok');
+  }catch(e){ reportError(e); }
+  finally{ btn.disabled = false; }
 });
 
 function boot(){ setMeta(); render(); }
